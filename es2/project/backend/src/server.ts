@@ -1,6 +1,9 @@
+import dotenv from 'dotenv';
+// Load environment variables
+dotenv.config();
+
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { testDbConnection } from './config/database';
 import { syncDatabase } from './models';
 
@@ -12,9 +15,7 @@ import pizzaOptionRoutes from './routes/pizzaOptionRoutes';
 import addressRoutes from './routes/addressRoutes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes';
 import orderRoutes from './routes/orderRoutes';
-
-// Load environment variables
-dotenv.config();
+import paymentRoutes from './routes/paymentRoutes';
 
 // Initialize Express app
 const app: Express = express();
@@ -23,7 +24,11 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173', // URL do frontend
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 // Routes
 app.get('/', (req: Request, res: Response) => {
@@ -38,6 +43,7 @@ app.use('/api/pizza-options', pizzaOptionRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

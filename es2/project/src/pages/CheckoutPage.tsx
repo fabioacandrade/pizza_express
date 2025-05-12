@@ -5,6 +5,10 @@ import { formatCurrency } from '../utils/formatters';
 import { Address, PaymentMethod } from '../types';
 import { ArrowLeft, ChevronRight, CreditCard, MapPin } from 'lucide-react';
 import { addressApi, paymentMethodApi } from '../services/api';
+import { loadStripe } from '@stripe/stripe-js';
+import StripeCheckout from '../components/StripeCheckout';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 const CheckoutPage: React.FC = () => {
   const { 
@@ -18,6 +22,7 @@ const CheckoutPage: React.FC = () => {
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [deliveryFee] = useState(5.00);
+  const [processPayment, setProcessPayment] = useState<(() => Promise<void>) | null>(null);
   
   // Form state
   const [address, setAddress] = useState<Address>({
@@ -33,8 +38,8 @@ const CheckoutPage: React.FC = () => {
   
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>({
     id: '',
-    type: 'PIX',
-    details: 'Pagamento via PIX'
+    type: 'CREDIT_CARD',
+    details: 'Cartão de Crédito'
   });
   
   // Redirect to menu if cart is empty
@@ -54,13 +59,17 @@ const CheckoutPage: React.FC = () => {
     setOrderError(null);
     
     try {
+      // Se for cartão de crédito, processa o pagamento primeiro
+      if (paymentMethod.type === 'CREDIT_CARD' && processPayment) {
+        await processPayment();
+      }
+
       // Primeiro vamos criar ou recuperar o endereço
       let orderAddress = address;
       
       // Criar um novo endereço se não tiver um ID
       if (!address.id) {
         try {
-          // Crie o novo endereço
           const addressResponse = await addressApi.create({
             street: address.street,
             number: address.number || '',
@@ -71,7 +80,6 @@ const CheckoutPage: React.FC = () => {
             zipCode: address.zipCode
           });
           
-          // Use o endereço recém-criado para o pedido
           orderAddress = addressResponse.data;
         } catch (error) {
           console.error('Error creating address:', error);
@@ -81,19 +89,16 @@ const CheckoutPage: React.FC = () => {
         }
       }
       
-      // Agora vamos criar o método de pagamento também
+      // Para outros métodos de pagamento, continua com o fluxo normal
       let orderPaymentMethod = paymentMethod;
       
-      // Criar um novo método de pagamento se não tiver um ID
       if (!paymentMethod.id) {
         try {
-          // Crie o novo método de pagamento
           const paymentResponse = await paymentMethodApi.create({
             type: paymentMethod.type,
-            details: paymentMethod.details || `Pagamento via ${paymentMethod.type === 'PIX' ? 'PIX' : 'Dinheiro'}`
+            details: paymentMethod.details || `Pagamento via ${paymentMethod.type === 'CREDIT_CARD' ? 'Cartão de Crédito' : 'Dinheiro'}`
           });
           
-          // Use o método de pagamento recém-criado para o pedido
           orderPaymentMethod = paymentResponse.data;
         } catch (error) {
           console.error('Error creating payment method:', error);
@@ -103,7 +108,6 @@ const CheckoutPage: React.FC = () => {
         }
       }
       
-      // Agora criar o pedido com o endereço e método de pagamento criados/recuperados
       const order = await createOrder(orderAddress, orderPaymentMethod);
       if (order) {
         navigate(`/orders/status/${order.id}`);
@@ -113,6 +117,49 @@ const CheckoutPage: React.FC = () => {
       setOrderError('Erro ao criar o pedido. Por favor, tente novamente.');
     } finally {
       setIsCreatingOrder(false);
+    }
+  };
+
+  const handlePaymentSuccess = async () => {
+    try {
+      // Primeiro vamos criar ou recuperar o endereço
+      let orderAddress = address;
+      
+      if (!address.id) {
+        try {
+          const addressResponse = await addressApi.create({
+            street: address.street,
+            number: address.number || '',
+            complement: address.complement || '',
+            neighborhood: address.neighborhood || '',
+            city: address.city,
+            state: address.state,
+            zipCode: address.zipCode
+          });
+          
+          orderAddress = addressResponse.data;
+        } catch (error) {
+          console.error('Error creating address:', error);
+          setOrderError('Erro ao criar endereço. Por favor, tente novamente.');
+          return;
+        }
+      }
+
+      // Criar método de pagamento para cartão de crédito
+      const paymentResponse = await paymentMethodApi.create({
+        type: 'CREDIT_CARD',
+        details: 'Pagamento via Cartão de Crédito'
+      });
+
+      // Criar o pedido com o endereço e método de pagamento
+      const order = await createOrder(orderAddress, paymentResponse.data);
+      
+      if (order) {
+        navigate(`/orders/status/${order.id}`);
+      }
+    } catch (error) {
+      console.error('Error creating order after payment:', error);
+      setOrderError('Erro ao criar o pedido após o pagamento. Por favor, tente novamente.');
     }
   };
   
@@ -247,11 +294,11 @@ const CheckoutPage: React.FC = () => {
                       type="radio"
                       className="form-radio text-red-600"
                       name="paymentType"
-                      value="PIX"
-                      checked={paymentMethod.type === 'PIX'}
-                      onChange={() => setPaymentMethod({ ...paymentMethod, type: 'PIX' as const, details: 'Pagamento via PIX' })}
+                      value="CREDIT_CARD"
+                      checked={paymentMethod.type === 'CREDIT_CARD'}
+                      onChange={() => setPaymentMethod({ ...paymentMethod, type: 'CREDIT_CARD' as const, details: 'Cartão de Crédito' })}
                     />
-                    <span className="ml-2">PIX</span>
+                    <span className="ml-2">Cartão de Crédito</span>
                   </label>
                   
                   <label className="inline-flex items-center">
@@ -266,6 +313,17 @@ const CheckoutPage: React.FC = () => {
                     <span className="ml-2">Dinheiro</span>
                   </label>
                 </div>
+
+                {paymentMethod.type === 'CREDIT_CARD' && (
+                  <div className="mt-4">
+                    <StripeCheckout
+                      amount={(cartTotal + deliveryFee) * 100}
+                      onSuccess={() => {}}
+                      onError={(error) => setOrderError(error)}
+                      onPaymentReady={(processPaymentFn) => setProcessPayment(() => processPaymentFn)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
             

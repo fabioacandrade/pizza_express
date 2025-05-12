@@ -272,11 +272,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       const orderData = {
         addressId: address.id,
-        // Se o método de pagamento for temporário (com id = 'new'), usar um valor padrão que o backend possa aceitar
-        // Em uma implementação real, deveríamos criar o método de pagamento antes
-        paymentMethodId: paymentMethod.id !== 'new' ? paymentMethod.id : 'default',
+        paymentMethodId: paymentMethod.id,
         items: orderItems,
-        total: cartTotal
+        total: cartTotal,
+        deliveryFee: 5.00 // Taxa de entrega fixa
       };
       
       console.log('Sending order data:', orderData);
@@ -284,11 +283,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await orderApi.create(orderData) as ApiResponse<Order>;
       const newOrder = response.data;
       
-      // Update orders list
-      setOrders(prevOrders => [newOrder, ...prevOrders]);
-      
-      // Clear cart after successful order
-      clearCart();
+      if (newOrder) {
+        // Update orders list
+        setOrders(prevOrders => [newOrder, ...prevOrders]);
+        
+        // Clear cart after successful order
+        clearCart();
+      }
       
       return newOrder;
     } catch (error) {

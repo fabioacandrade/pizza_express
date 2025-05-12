@@ -6,9 +6,9 @@ dotenv.config();
 
 // Create Sequelize instance
 const sequelize = new Sequelize(
-  process.env.DB_NAME || 'pizzeria',
-  process.env.DB_USER || 'root',
-  process.env.DB_PASSWORD || 'password',
+  process.env.DB_NAME || 'pizza_db',
+  process.env.DB_USER || 'pizza_user',
+  process.env.DB_PASSWORD || 'senhaforte123',
   {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '3306'),

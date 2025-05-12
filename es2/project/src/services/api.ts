@@ -228,7 +228,18 @@ export const paymentMethodApi = {
 export const orderApi = {
   getAll: () => apiFetch<Order[]>('/orders'),
   getById: (id: string) => apiFetch<Order>(`/orders/${id}`),
-  create: (order: { items: { productId: string; quantity: number }[]; total: number; addressId: string; paymentMethodId: string }) =>
+  create: (order: { 
+    items: { 
+      productId: string; 
+      quantity: number;
+      notes?: string;
+      selectedOptions?: string[];
+    }[]; 
+    total: number; 
+    addressId: string; 
+    paymentMethodId: string;
+    deliveryFee: number;
+  }) =>
     apiFetch<Order>('/orders', {
       method: 'POST',
       body: JSON.stringify(order),
